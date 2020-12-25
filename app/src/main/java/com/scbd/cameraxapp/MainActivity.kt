@@ -2,18 +2,22 @@ package com.scbd.cameraxapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import kotlinx.android.synthetic.main.activity_main.*
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -46,7 +50,44 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
-    private fun takePhoto() {}
+    private fun takePhoto() {
+        /* First, get a reference to the ImageCapture use case. If the use case is null, exit out of the function. This will be
+        null If you tap the photo button before image capture is set up. Without the return statement, the app would
+        crash if it was null. */
+        val imageCapture = imageCapture ?: return
+
+        /* Create an OutputFileOptions object. This object is where you can specify things about how you want your
+        output to be. You want the output saved in the file we just created, so add your photoFile */
+        val photoFile = File(
+            outputDirectory,
+            SimpleDateFormat(
+                FILENAME_FORMAT, Locale.US
+            ).format(System.currentTimeMillis()) + ".jpg"
+        )
+        /* Create an OutputFileOptions object. This object is where you can specify things about how you want your output to be. You want the output saved in the file we just created, so add your photoFile */
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        /*  Call takePicture() on the imageCapture object. Pass in outputOptions, the executor, and a callback for
+        when the image is saved. You'll fill out the callback next */
+        imageCapture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                //In the case that the image capture fails or saving the image capture fails, add in an error case to log that it failed.
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
+                }
+
+                /* If the capture doesn't fail, the photo was taken successfully! Save the photo to the file you created earlier, present a
+                toast to let the user know it was successful, and print a log statement. */
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val savedUri = Uri.fromFile(photoFile)
+                    val msg = "Photo capture succeeded: $savedUri"
+                    Toast.makeText(baseContext, msg, Toast.LENGTH_SHORT).show()
+                    Log.d(TAG, msg)
+                }
+            })
+    }
 
     private fun startCamera() {
 
@@ -66,7 +107,7 @@ class MainActivity : AppCompatActivity() {
             // Used to bind the lifecycle of cameras to the lifecycle owner
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
 
-            /*Initialize your Preview object, call build on it, get a surface provider from viewfinder, and then set it on the
+            /* Initialize your Preview object, call build on it, get a surface provider from viewfinder, and then set it on the
             preview.*/
 
             val preview = Preview.Builder()
@@ -74,6 +115,9 @@ class MainActivity : AppCompatActivity() {
                 .also {
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
+
+            imageCapture = ImageCapture.Builder()
+                .build()
 
             // Select back camera as a default
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -85,7 +129,7 @@ class MainActivity : AppCompatActivity() {
 
                 // Bind use cases to camera
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview
+                    this, cameraSelector, preview, imageCapture
                 )
 
             } catch (exc: Exception) {
